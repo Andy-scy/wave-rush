@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>WAVE RUSH — 海上摩托竞速</title>
+<link rel="stylesheet" href="./src/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<script>
+/* 诊断用：捕获 console.error/warn（着色器编译错误定位） */
+window.__clogs = [];
+(function(){ const e = console.error, w = console.warn;
+  console.error = function(){ window.__clogs.push('[E] ' + Array.from(arguments).map(String).join(' ').slice(0, 600)); e.apply(console, arguments); };
+  console.warn = function(){ window.__clogs.push('[W] ' + Array.from(arguments).map(String).join(' ').slice(0, 600)); w.apply(console, arguments); };
+})();
+</script>
+<canvas id="game-canvas"></canvas>
+
+<!-- 全屏氛围层：速度线 / 暗角 / Boost 色彩 -->
+<div id="fx-speedlines"></div>
+<div id="fx-vignette"></div>
+<div id="fx-boost"></div>
+<div id="fx-damage"></div>
+
+<!-- HUD -->
+<div id="hud" class="screen hidden">
+  <div class="hud-tl glass">
+    <div class="hud-label">排名</div>
+    <div class="hud-big"><span id="hud-pos">1</span><span class="hud-sub" id="hud-pos-total">/6</span></div>
+  </div>
+  <div class="hud-tc glass">
+    <div class="hud-label">圈数 <span id="hud-lap">1/3</span> · <span id="hud-cpnum">下一检查点 1/8</span></div>
+    <div class="hud-checkpoints" id="hud-cps"></div>
+  </div>
+  <div id="hud-compass" class="glass">
+    <div class="compass-bar">
+      <div class="compass-tick" style="left:25%"></div>
+      <div class="compass-tick" style="left:50%"></div>
+      <div class="compass-tick" style="left:75%"></div>
+      <div id="compass-marker">▲</div>
+    </div>
+    <div class="compass-foot"><span>下一检查点</span><span id="compass-dist">0m</span></div>
+  </div>
+  <div class="hud-tr glass">
+    <div class="hud-label">时间</div>
+    <div class="hud-big mono" id="hud-time">00:00.00</div>
+    <div class="hud-label" style="margin-top:6px">最佳 <span class="mono" id="hud-best">--:--.--</span></div>
+  </div>
+  <div class="hud-bl">
+    <div class="hud-speed"><span id="hud-speed">0</span><span class="hud-speed-unit">KM/H</span></div>
+  </div>
+  <div class="hud-br">
+    <div class="hud-label">氮气</div>
+    <div class="boost-bar"><div class="boost-fill" id="hud-boost"></div></div>
+    <div class="hud-label" style="margin-top:6px;opacity:.7" id="hud-boost-hint">Shift 键</div>
+  </div>
+  <div id="hud-wrongway" class="hidden">逆行!</div>
+  <div id="hud-tricktoast"></div>
+  <div id="hud-rankboard" class="glass"></div>
+  <div id="hud-lapflash" class="hidden"></div>
+  <canvas id="minimap" class="glass"></canvas>
+</div>
+<div id="fps-meter" class="glass">-- FPS</div>
+
+<!-- 倒计时 -->
+<div id="countdown" class="screen hidden"><div id="countdown-num"></div></div>
+
+<!-- 主菜单 -->
+<div id="menu" class="screen">
+  <div class="menu-title">
+    <h1><span class="t-wave">WAVE</span> <span class="t-rush">RUSH</span></h1>
+    <div class="menu-sub">阳光海域 · 风格化摩托艇竞速</div>
+  </div>
+  <div class="menu-buttons" id="menu-buttons">
+    <div class="diff-row" id="diff-row">
+      <span class="diff-label">AI 难度</span>
+      <button class="diff-chip" data-d="0">低</button>
+      <button class="diff-chip sel" data-d="1">中</button>
+      <button class="diff-chip" data-d="2">高</button>
+    </div>
+    <button class="btn btn-primary" id="btn-play">开始比赛&nbsp;&nbsp;▸</button>
+    <button class="btn" id="btn-mp">本地联机</button>
+    <button class="btn" id="btn-settings">设置</button>
+  </div>
+  <div class="menu-best glass hidden" id="menu-best"></div>
+  <div class="menu-hint">W/S 加速减速 · A/D 转向 · SPACE 跳跃特技 · SHIFT 氮气 · C 镜头 · ESC 暂停&nbsp;&nbsp;|&nbsp;&nbsp;v1.2</div>
+</div>
+
+<!-- 多人联机 -->
+<div id="mp-panel" class="screen hidden">
+  <div class="panel glass">
+    <h2>本地联机</h2>
+    <div id="mp-status" class="mp-status">正在检测局域网服务…</div>
+    <div class="mp-section">
+      <div class="mp-label">你的名字</div>
+      <input id="mp-name" class="mp-input" maxlength="10" placeholder="PLAYER">
+      <div class="mp-label" style="margin-top:10px">你的配色</div>
+      <div id="mp-colors" class="mp-colors"></div>
+    </div>
+    <div class="mp-cols">
+      <div class="mp-col">
+        <div class="mp-label">创建房间</div>
+        <button class="btn btn-primary" id="mp-create">创建房间</button>
+        <div class="mp-code glass hidden" id="mp-code"></div>
+        <div class="mp-label" style="margin-top:10px">玩家 <span id="mp-count">1</span></div>
+        <div id="mp-players" class="mp-players"></div>
+        <button class="btn btn-primary hidden" id="mp-start">开始比赛 ▸</button>
+      </div>
+      <div class="mp-col">
+        <div class="mp-label">加入房间</div>
+        <input id="mp-join-code" class="mp-input code" maxlength="5" placeholder="A7K92">
+        <button class="btn" id="mp-join">加入房间</button>
+        <div class="mp-note">同一局域网内，其他设备打开本页面后输入房间码即可加入。</div>
+      </div>
+    </div>
+    <button class="btn btn-back" id="mp-back">◂ 返回</button>
+  </div>
+</div>
+
+<!-- 设置 -->
+<div id="settings-panel" class="screen hidden">
+  <div class="panel glass">
+    <h2>设置</h2>
+    <div class="set-row">
+      <div class="set-label">画质</div>
+      <div class="set-opts" id="set-graphics">
+        <button data-v="AUTO">自动</button><button data-v="LOW">低</button>
+        <button data-v="MEDIUM">中</button><button data-v="HIGH">高</button>
+        <button data-v="ULTRA">极高</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <div class="set-label">总音量</div>
+      <input type="range" id="set-vol-master" min="0" max="100" value="80">
+      <span class="set-val" id="set-vol-master-v">80</span>
+    </div>
+    <div class="set-row">
+      <div class="set-label">音乐</div>
+      <input type="range" id="set-vol-music" min="0" max="100" value="70">
+      <span class="set-val" id="set-vol-music-v">70</span>
+    </div>
+    <div class="set-row">
+      <div class="set-label">音效</div>
+      <input type="range" id="set-vol-sfx" min="0" max="100" value="90">
+      <span class="set-val" id="set-vol-sfx-v">90</span>
+    </div>
+    <div class="set-row">
+      <div class="set-label">镜头震动</div>
+      <div class="set-opts" id="set-shake">
+        <button data-v="ON">开</button><button data-v="OFF">关</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <div class="set-label">圈数</div>
+      <div class="set-opts" id="set-laps">
+        <button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button>
+      </div>
+    </div>
+    <button class="btn btn-back" id="settings-back">◂ 返回</button>
+  </div>
+</div>
+
+<!-- 暂停 -->
+<div id="pause-panel" class="screen hidden">
+  <div class="pause-inner glass">
+    <h2>已暂停</h2>
+    <button class="btn btn-primary" id="btn-resume">继续比赛 ▸</button>
+    <button class="btn" id="btn-restart">重新开始</button>
+    <button class="btn" id="btn-quit">返回主菜单</button>
+  </div>
+</div>
+
+<!-- 结算 -->
+<div id="results-panel" class="screen hidden">
+  <div class="results-inner">
+    <div class="results-place" id="res-place">第1名！</div>
+    <div class="results-time glass"><span class="hud-label">总时间</span><div class="mono big" id="res-time">01:42.53</div></div>
+    <div class="results-grid">
+      <div class="glass res-cell"><span class="hud-label">最佳单圈</span><div class="mono" id="res-bestlap">--</div></div>
+      <div class="glass res-cell"><span class="hud-label">特技次数</span><div class="mono" id="res-tricks">0</div></div>
+      <div class="glass res-cell"><span class="hud-label">氮气次数</span><div class="mono" id="res-boost">0</div></div>
+      <div class="glass res-cell"><span class="hud-label">距离</span><div class="mono" id="res-dist">0 KM</div></div>
+      <div class="glass res-cell"><span class="hud-label">特技得分</span><div class="mono" id="res-score">0</div></div>
+    </div>
+    <div class="results-board glass" id="res-board"></div>
+    <div class="results-btns">
+      <button class="btn btn-primary" id="btn-rematch">再来一局 ▸</button>
+      <button class="btn" id="btn-menu">返回主菜单</button>
+    </div>
+  </div>
+</div>
+
+<!-- 触摸控制 -->
+<div id="touch-ui" class="hidden">
+  <div class="tzone t-left">
+    <button class="tbtn" id="t-left">◀</button>
+    <button class="tbtn" id="t-right">▶</button>
+  </div>
+  <div class="tzone t-right">
+    <button class="tbtn small" id="t-brake">▼</button>
+    <button class="tbtn small" id="t-jump">✦</button>
+    <button class="tbtn accent" id="t-boost">⚡</button>
+    <button class="tbtn primary" id="t-gas">▲</button>
+  </div>
+</div>
+
+<div id="loading">正在生成大海…</div>
+<div id="rot-hint" class="hidden">↻ 请横屏游玩以获得最佳体验</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

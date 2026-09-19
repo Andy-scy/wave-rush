@@ -1,0 +1,14 @@
+# 便携运行时（体积大，且可从 nodejs.org 重新获取）
+tools/
+*.zip
+
+# 依赖与临时文件
+node_modules/
+.tmp*/
+*.log
+
+# 编辑器/系统
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

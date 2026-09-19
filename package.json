@@ -1,0 +1,14 @@
+{
+  "name": "wave-rush",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "license": "MIT",
+  "description": "WAVE RUSH — stylized 3D jet-ski arcade racing game for the browser",
+  "dependencies": {
+    "three": "^0.180.0"
+  }
+}
